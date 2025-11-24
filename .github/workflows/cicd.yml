@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/integration-lr3
+  IMAGE_NAME: savytskaviks/integration-lr3
 
 jobs:
   #############################
