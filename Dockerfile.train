@@ -1,13 +1,14 @@
-# Dockerfile.train
 FROM python:3.10-slim
 
-# torchaudio потребує sox / звукові бібліотеки
 RUN apt-get update && apt-get install -y sox libsox-dev libsox-fmt-all && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Завжди створюємо папку для датасету
+RUN mkdir -p /app/data
 
 COPY model.py train.py ./
 
@@ -16,3 +17,4 @@ ENV OUTPUT_DIR=/app/artifacts
 ENV DATA_ROOT=/app/data
 
 CMD ["python", "train.py"]
+
