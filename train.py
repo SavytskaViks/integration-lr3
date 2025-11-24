@@ -18,16 +18,19 @@ DATA_ROOT = os.getenv("DATA_ROOT", "data")
 class SubsetSpeechCommands(torchaudio.datasets.SPEECHCOMMANDS):
     def __init__(self, root, subset):
         super().__init__(root=root, download=True, subset=subset)
-        # фільтруємо walker тільки на потрібні класи
-        self._walker = [w for w in self._walker if self._get_label(w) in CLASSES]
 
-    def _get_label(self, fileid: str) -> str:
-        # fileid типу "up/0a7c2a8d_nohash_0.wav"
-        return fileid.split("/")[0]
+        # Правильна побудова walker: беремо назву папки звуку через повний шлях
+        new_walker = []
+        for fileid in self._walker:
+            path = os.path.join(self._path, fileid)
+            label = path.split("/")[-2]  # ім’я папки (label)
+            if label in CLASSES:
+                new_walker.append(fileid)
 
-    def __getitem__(self, n):
-        # базовий __getitem__ повертає (waveform, sample_rate, label, speaker_id, utterance_number)
-        waveform, sample_rate, label, *_ = super().__getitem__(n)
+        self._walker = new_walker
+
+    def __getitem__(self, index):
+        waveform, sample_rate, label, *_ = super().__getitem__(index)
         return waveform, CLASS_TO_IDX[label]
 
 
