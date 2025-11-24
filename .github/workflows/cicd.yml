@@ -95,6 +95,12 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           push: ${{ github.event_name != 'pull_request' }}
 
+      # === ВАЖЛИВЕ ВИПРАВЛЕННЯ ===
+      - name: Pull image before saving
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
       - name: Save inference image to tar
         if: ${{ github.event_name != 'pull_request' }}
         run: |
@@ -134,7 +140,6 @@ jobs:
         run: |
           docker run -d --rm -p 8000:8000 --name speech-inference \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          # Чекаємо, поки Flask-API підніметься
           sleep 15
 
       - name: Install sox for WAV creation
@@ -145,8 +150,6 @@ jobs:
       - name: Test /predict endpoint and measure latency
         run: |
           mkdir -p test-artifacts/metrics
-
-          # Створюємо одну секунду тиші (WAV, 16000 Hz)
           sox -n -r 16000 -c 1 silence.wav trim 0.0 1.0
 
           start_ms=$(date +%s%3N)
