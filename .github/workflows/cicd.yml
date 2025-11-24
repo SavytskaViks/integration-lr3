@@ -1,0 +1,187 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/integration-lr3
+
+jobs:
+  #############################
+  # 1) TRAIN MODEL JOB
+  #############################
+  train_model:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build training image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.train
+          push: false
+          tags: speech-train:latest
+          load: true
+
+      - name: Run training container
+        run: |
+          mkdir -p artifacts
+          docker run --rm \
+            -e EPOCHS=2 \
+            -e OUTPUT_DIR=/app/artifacts \
+            -e DATA_ROOT=/app/data \
+            -v ${{ github.workspace }}/artifacts:/app/artifacts \
+            speech-train:latest
+
+      - name: Upload training artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: artifacts/**
+          if-no-files-found: error
+
+  #############################
+  # 2) BUILD + PUSH INFERENCE IMAGE
+  #############################
+  build_and_push_inference:
+    runs-on: ubuntu-latest
+    needs: train_model
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download trained model artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model
+          path: trained-model
+
+      - name: Prepare best_model.pth for Docker build
+        run: |
+          cp trained-model/model/best_model.pth best_model.pth
+          ls -R .
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR (using CR_PAT)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.CR_PAT }}
+
+      - name: Build and (conditionally) push inference image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          push: ${{ github.event_name != 'pull_request' }}
+
+      - name: Save inference image to tar
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          docker save ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest -o inference_image.tar
+
+      - name: Upload inference image tar
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: inference-image
+          path: inference_image.tar
+
+  #############################
+  # 3) TEST INFERENCE
+  #############################
+  test_inference:
+    runs-on: ubuntu-latest
+    needs: build_and_push_inference
+
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.CR_PAT }}
+
+      - name: Pull inference image
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Run inference container
+        run: |
+          docker run -d --rm -p 8000:8000 --name speech-inference \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          # Чекаємо, поки Flask-API підніметься
+          sleep 15
+
+      - name: Install sox for WAV creation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sox
+
+      - name: Test /predict endpoint and measure latency
+        run: |
+          mkdir -p test-artifacts/metrics
+
+          # Створюємо одну секунду тиші (WAV, 16000 Hz)
+          sox -n -r 16000 -c 1 silence.wav trim 0.0 1.0
+
+          start_ms=$(date +%s%3N)
+          status=$(curl -s -o response.json -w "%{http_code}" \
+            -F "file=@silence.wav" \
+            http://localhost:8000/predict)
+          end_ms=$(date +%s%3N)
+
+          if [ "$status" -ne 200 ]; then
+            echo "Request failed with status code $status"
+            cat response.json || true
+            exit 1
+          fi
+
+          latency_ms=$((end_ms - start_ms))
+
+          echo "Latency: ${latency_ms} ms"
+          cat response.json
+
+          cat > test-artifacts/metrics/inference_metrics.json <<EOF
+          {
+            "latency_ms": $latency_ms,
+            "http_status": $status
+          }
+          EOF
+
+      - name: Upload inference test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: inference-metrics
+          path: |
+            test-artifacts/metrics/inference_metrics.json
+            response.json
+
+      - name: Stop container
+        if: always()
+        run: |
+          docker stop speech-inference || true

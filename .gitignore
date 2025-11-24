@@ -1,0 +1,83 @@
+# ============================
+#   PYTHON / MACHINE LEARNING
+# ============================
+
+# Віртуальні середовища
+venv/
+.venv/
+env/
+ENV/
+*.env
+
+# Кеші Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Логи
+*.log
+*.txt
+logs/
+artifacts/
+*.out
+
+# Моделі (крім якщо треба залишати best_model.pth руками)
+*.pth
+*.pt
+*.onnx
+
+# Датасет Google Speech Commands
+data/
+dataset/
+.cache/
+.cache/
+*.zip
+*.tar.gz
+
+# Torch кеші
+~/.cache/torch/
+cache/
+torch_cache/
+
+# Тимчасові файли
+*.tmp
+*.temp
+*.bak
+*.swp
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# ============================
+#           DOCKER
+# ============================
+
+# Docker build cache
+docker-cache/
+*.tar
+
+# ============================
+#           WEB
+# ============================
+
+# Flask кеш
+instance/
+*.pyc
+
+# Node / frontend (якщо додаси пізніше)
+node_modules/
+dist/
+npm-debug.log
+yarn-error.log
+
+# ============================
+#         GITHUB ACTIONS
+# ============================
+
+# Артефакти workflow
+trained-model/
+inference-image/
+inference-metrics/
