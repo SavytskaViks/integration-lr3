@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class SpeechCommandCNN(nn.Module):
+class SpeechCommandModel(nn.Module):
     def __init__(self, num_classes=4):
         super().__init__()
 
