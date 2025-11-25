@@ -22,6 +22,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # === КЕШ ДОКЕР ЛЕЄРІВ ===
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -33,6 +42,8 @@ jobs:
           push: false
           tags: speech-train:latest
           load: true
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
 
       - name: Run training container
         run: |
@@ -50,6 +61,13 @@ jobs:
           name: trained-model
           path: artifacts/**
           if-no-files-found: error
+
+      # === ДОДАНО: Завантаження звіту ===
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab3-report
+          path: report.md
 
   #############################
   # 2) BUILD + PUSH INFERENCE IMAGE
@@ -77,6 +95,15 @@ jobs:
           cp trained-model/model/best_model.pth best_model.pth
           ls -R .
 
+      # === КЕШ ДОКЕР ЛЕЄРІВ ===
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -94,8 +121,9 @@ jobs:
           file: ./Dockerfile
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           push: ${{ github.event_name != 'pull_request' }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
 
-      # === ВАЖЛИВЕ ВИПРАВЛЕННЯ ===
       - name: Pull image before saving
         if: ${{ github.event_name != 'pull_request' }}
         run: |
